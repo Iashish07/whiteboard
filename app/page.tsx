@@ -27,6 +27,8 @@ export default function Home() {
     isDrawing.current = true;
     startX.current = e.nativeEvent.offsetX;
     startY.current = e.nativeEvent.offsetY;
+    lastx.current = e.nativeEvent.offsetX;
+    lasty.current = e.nativeEvent.offsetY;
 
     // Save the current canvas state so we can restore it while drawing the rectangle preview
     snapshot.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
