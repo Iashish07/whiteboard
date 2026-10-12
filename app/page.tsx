@@ -2,47 +2,85 @@
 import { useRef } from "react";
 
 export default function Home() {
-  
-  const storestrokes = [{
-    startX: 0,
-    startY: 0,
-    endX: 0,
-    endY: 0,
-    tool: 'pen',
-  }] as any;
-  const storehistory = ()=>{
-    if(mousetrack.current.isDown && mousetrack.current.isMoving){
-      storestrokes[0].startX = lastx.current;
-      storestrokes[0].startY = lasty.current;
-      storestrokes[0].endX = lastx.current;
-      storestrokes[0].endY = lasty.current;
-    }
-    else if(mousetrack.current.isUp && mousetrack.current.isMoving){
-      storestrokes.push({
-        tool: activeTool.current,
-        startX: lastx.current,
-        startY: lasty.current,
-        endX: lastx.current,
-        endY: lasty.current,
-      })
-    }
-    }
-  
+
+  type Point = {
+    x: number;
+    y: number;
+  };
+
+  type HistoryItem = {
+    tool: 'pen' | 'rectangle';
+    points: Point[];
+  };
+
+
+  const undo = () => {
+    const canvas = canvasref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Remove the last action from the history stack
+    console.log(historystack.current);
+    historystack.current.pop();
+
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Redraw all actions in the history stack
+    historystack.current.forEach((item) => {
+      if (item.tool === 'pen') {
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        item.points.forEach((point, index) => {
+          if (index === 0) {
+            ctx.moveTo(point.x, point.y);
+          } else {
+            ctx.lineTo(point.x, point.y);
+          }
+        });
+        ctx.stroke();
+      } else if (item.tool === 'rectangle') {
+        const startPoint = item.points[0];
+        const endPoint = item.points[1];
+        const width = endPoint.x - startPoint.x;
+        const height = endPoint.y - startPoint.y;
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(startPoint.x, startPoint.y, width, height);
+      }
+    });
+  };
+
+  const historystack = useRef<HistoryItem[]>([]);
+
+  const clear = () => {
+    const canvas = canvasref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    historystack.current = [];
+  };
 
 
   const canvasref = useRef<HTMLCanvasElement>(null);
 
   const isDrawing = useRef(false);
-  let history = useRef([])
   const lastx = useRef(0);
   const lasty = useRef(0);
   let startX = useRef(0);
   let startY = useRef(0);
+
   const mousetrack = useRef({
-      isDown: false,
-      isUp: false,
-      isMoving: false,
-    })
+    isDown: false,
+    isUp: true,
+    isMoving: false
+  });
+
 
 
   const activeTool = useRef<'pen' | 'rectangle'>('pen');
@@ -50,7 +88,7 @@ export default function Home() {
   const snapshot = useRef<ImageData | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
-    mousetrack.current.isDown = true;
+    
     mousetrack.current.isUp = false;
     mousetrack.current.isMoving = false;
 
@@ -67,6 +105,11 @@ export default function Home() {
 
     // Save the current canvas state so we can restore it while drawing the rectangle preview
     snapshot.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    historystack.current.push({
+      tool: activeTool.current,
+      points: [{ x: startX.current, y: startY.current }]
+    });
+    
   };
 
   const handleMouseUp = () => {
@@ -76,6 +119,7 @@ export default function Home() {
     mousetrack.current.isMoving = false;
     // Reset snapshot 
     snapshot.current = null;
+
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
@@ -91,38 +135,41 @@ export default function Home() {
 
     const currentX = e.nativeEvent.offsetX;
     const currentY = e.nativeEvent.offsetY;
-    
-    
-    if(activeTool.current === 'pen') {
-      if  (e.nativeEvent.buttons === 1){
-      ctx.strokeStyle = 'black';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(lastx.current, lasty.current);
-      ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-      ctx.stroke();
 
-      lastx.current = e.nativeEvent.offsetX;
-      lasty.current = e.nativeEvent.offsetY;
+
+    if (activeTool.current === 'pen') {
+      if (e.nativeEvent.buttons === 1) {
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(lastx.current, lasty.current);
+        ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        ctx.stroke();
+
+        lastx.current = e.nativeEvent.offsetX;
+        lasty.current = e.nativeEvent.offsetY;
+        historystack.current[historystack.current.length - 1].points.push({ x: lastx.current, y: lasty.current });
+      }
     }
-    }
-    
-    
+
     else if (activeTool.current === 'rectangle') {
-      
+
       if (snapshot.current) {
         ctx.putImageData(snapshot.current, 0, 0);
       }
 
-      
+
       const width = currentX - startX.current;
       const height = currentY - startY.current;
 
       ctx.strokeStyle = 'black';
       ctx.lineWidth = 2;
       ctx.strokeRect(startX.current, startY.current, width, height);
+      historystack.current[historystack.current.length - 1].points[1] = { x: currentX, y: currentY };
+
     }
   };
+
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-neutral-200">
@@ -140,10 +187,14 @@ export default function Home() {
           >
             Rectangle
           </button>
-          <button className="bg-blue-500 active:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          <button 
+          onClick={undo}
+          className="bg-blue-500 active:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Undo
           </button>
-          <button className="bg-blue-500 active:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          <button
+            onClick={clear}
+            className="bg-blue-500 active:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             clear
           </button>
 
