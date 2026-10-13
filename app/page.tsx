@@ -9,20 +9,18 @@ export default function Home() {
   };
 
   type HistoryItem = {
-    tool: 'pen' | 'rectangle';
+    tool: 'pen' | 'rectangle' | "eraser";
     points: Point[];
   };
+  const historystack = useRef<HistoryItem[]>([]);
 
+  const redostack = useRef<HistoryItem[]>([]);
 
-  const undo = () => {
+  const redrawCanvas = () => {
     const canvas = canvasref.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    // Remove the last action from the history stack
-    console.log(historystack.current);
-    historystack.current.pop();
 
     // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -53,7 +51,30 @@ export default function Home() {
     });
   };
 
-  const historystack = useRef<HistoryItem[]>([]);
+
+  const undo = () => {
+    
+
+    // Remove the last action from the history stack
+    console.log(historystack.current);
+    redostack.current.push(historystack.current[historystack.current.length - 1]);
+    historystack.current.pop();
+    redrawCanvas();
+  };
+  const redo = () => {
+
+    // Remove the last action from the redo stack
+    const item = redostack.current.pop();
+    if (!item) return;
+
+    // Add the action back to the history stack
+    historystack.current.push(item);
+
+    // Redraw the canvas
+    redrawCanvas();
+  };
+
+  
 
   const clear = () => {
     const canvas = canvasref.current;
@@ -83,7 +104,7 @@ export default function Home() {
 
 
 
-  const activeTool = useRef<'pen' | 'rectangle'>('pen');
+  const activeTool = useRef<'pen' | 'rectangle' | "eraser">('pen');
 
   const snapshot = useRef<ImageData | null>(null);
 
@@ -152,6 +173,21 @@ export default function Home() {
       }
     }
 
+    else if (activeTool.current === 'eraser') {
+      if (e.nativeEvent.buttons === 1) {
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.moveTo(lastx.current, lasty.current);
+        ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        ctx.stroke();
+
+        lastx.current = e.nativeEvent.offsetX;
+        lasty.current = e.nativeEvent.offsetY;
+        historystack.current[historystack.current.length - 1].points.push({ x: lastx.current, y: lasty.current });
+      }
+    }
+
     else if (activeTool.current === 'rectangle') {
 
       if (snapshot.current) {
@@ -174,12 +210,19 @@ export default function Home() {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-neutral-200">
       <div className="h-9/10 w-9/10 bg-white rounded-2xl shadow-xl border border-neutral-300">
+
         <div id="menu" className="w-full h-1/10 space-x-4 p-4 m-auto mt-4 bg-blue-200 rounded-t-xl border-b border-neutral-300">
           <button
             onClick={() => { activeTool.current = 'pen'; }}
             className="bg-blue-500 focus:bg-blue-700 text-white font-bold py-2 px-4 rounded"
           >
             Pen
+          </button>
+          <button
+            onClick={() => { activeTool.current = 'eraser'; }}
+            className="bg-blue-500 focus:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Eraser
           </button>
           <button
             onClick={() => { activeTool.current = 'rectangle'; }}
@@ -189,12 +232,17 @@ export default function Home() {
           </button>
           <button 
           onClick={undo}
-          className="bg-blue-500 active:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          className="bg-blue-500 focus:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Undo
+          </button>
+          <button 
+          onClick={redo}
+          className="bg-blue-500 focus:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Redo
           </button>
           <button
             onClick={clear}
-            className="bg-blue-500 active:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            className="bg-blue-500 focus:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             clear
           </button>
 
@@ -210,6 +258,7 @@ export default function Home() {
             onMouseUp={handleMouseUp}
             onMouseMove={handleMouseMove}
           ></canvas>
+
         </div>
       </div>
     </div>
